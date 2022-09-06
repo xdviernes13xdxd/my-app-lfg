@@ -192,15 +192,15 @@ export default function Home() {
   return (
     <div>
       <Head>
-        <title>Whitelist Dapp</title>
-        <meta name="description" content="Whitelist-Dapp" />
-        <link rel="icon" href="/favicon.ico" />
+        <title>Whitelist Wild3</title>
+        <meta name="description" content="Whitelist-Wild3" />
+        <link rel="icon" href="/favicon.png" />
       </Head>
       <div className={styles.main}>
         <div>
-          <h1 className={styles.title}>Welcome to Crypto Devs!</h1>
+          <h1 className={styles.title}>Welcome to Wild3 Dapp!</h1>
           <div className={styles.description}>
-            Its an NFT collection for developers in Crypto.
+            Its an NFT collection for Wild3 followers.
           </div>
           <div className={styles.description}>
             {numberOfWhitelisted} have already joined the Whitelist
@@ -208,12 +208,12 @@ export default function Home() {
           {renderButton()}
         </div>
         <div>
-          <img className={styles.image} src="./crypto-devs.svg" />
+          <img className={styles.image} src="./cr.jpg" />
         </div>
       </div>
 
       <footer className={styles.footer}>
-        Made with &#10084; by Crypto Devs
+        Made with &#10084; by <a href="https://twitter.com/wild3_eth" target="_blank" rel="noreferrer">Wild3</a>
       </footer>
     </div>
   );
