@@ -1,215 +1,199 @@
-import { BigNumber, Contract, providers, utils } from "ethers";
+import { Contract, providers, utils } from "ethers";
 import Head from "next/head";
 import React, { useEffect, useRef, useState } from "react";
 import Web3Modal from "web3modal";
-import {
-  NFT_CONTRACT_ABI,
-  NFT_CONTRACT_ADDRESS,
-  TOKEN_CONTRACT_ABI,
-  TOKEN_CONTRACT_ADDRESS,
-} from "../constants";
+import { abi, NFT_CONTRACT_ADDRESS } from "../constants";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
-  // Create a BigNumber `0`
-  const zero = BigNumber.from(0);
-  // walletConnected keeps track of whether the user's wallet is connected or not
+  // walletConnected keep track of whether the user's wallet is connected or not
   const [walletConnected, setWalletConnected] = useState(false);
+  // presaleStarted keeps track of whether the presale has started or not
+  const [presaleStarted, setPresaleStarted] = useState(false);
+  // presaleEnded keeps track of whether the presale ended
+  const [presaleEnded, setPresaleEnded] = useState(false);
   // loading is set to true when we are waiting for a transaction to get mined
   const [loading, setLoading] = useState(false);
-  // tokensToBeClaimed keeps track of the number of tokens that can be claimed
-  // based on the Crypto Dev NFT's held by the user for which they havent claimed the tokens
-  const [tokensToBeClaimed, setTokensToBeClaimed] = useState(zero);
-  // balanceOfCryptoDevTokens keeps track of number of Crypto Dev tokens owned by an address
-  const [balanceOfCryptoDevTokens, setBalanceOfCryptoDevTokens] = useState(
-    zero
-  );
-  // amount of the tokens that the user wants to mint
-  const [tokenAmount, setTokenAmount] = useState(zero);
-  // tokensMinted is the total number of tokens that have been minted till now out of 10000(max total supply)
-  const [tokensMinted, setTokensMinted] = useState(zero);
-  // isOwner gets the owner of the contract through the signed address
+  // checks if the currently connected MetaMask wallet is the owner of the contract
   const [isOwner, setIsOwner] = useState(false);
+  // tokenIdsMinted keeps track of the number of tokenIds that have been minted
+  const [tokenIdsMinted, setTokenIdsMinted] = useState("0");
   // Create a reference to the Web3 Modal (used for connecting to Metamask) which persists as long as the page is open
   const web3ModalRef = useRef();
 
   /**
-   * getTokensToBeClaimed: checks the balance of tokens that can be claimed by the user
+   * presaleMint: Mint an NFT during the presale
    */
-  const getTokensToBeClaimed = async () => {
-    try {
-      // Get the provider from web3Modal, which in our case is MetaMask
-      // No need for the Signer here, as we are only reading state from the blockchain
-      const provider = await getProviderOrSigner();
-      // Create an instance of NFT Contract
-      const nftContract = new Contract(
-        NFT_CONTRACT_ADDRESS,
-        NFT_CONTRACT_ABI,
-        provider
-      );
-      // Create an instance of tokenContract
-      const tokenContract = new Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        TOKEN_CONTRACT_ABI,
-        provider
-      );
-      // We will get the signer now to extract the address of the currently connected MetaMask account
-      const signer = await getProviderOrSigner(true);
-      // Get the address associated to the signer which is connected to  MetaMask
-      const address = await signer.getAddress();
-      // call the balanceOf from the NFT contract to get the number of NFT's held by the user
-      const balance = await nftContract.balanceOf(address);
-      // balance is a Big number and thus we would compare it with Big number `zero`
-      if (balance === zero) {
-        setTokensToBeClaimed(zero);
-      } else {
-        // amount keeps track of the number of unclaimed tokens
-        var amount = 0;
-        // For all the NFT's, check if the tokens have already been claimed
-        // Only increase the amount if the tokens have not been claimed
-        // for a an NFT(for a given tokenId)
-        for (var i = 0; i < balance; i++) {
-          const tokenId = await nftContract.tokenOfOwnerByIndex(address, i);
-          const claimed = await tokenContract.tokenIdsClaimed(tokenId);
-          if (!claimed) {
-            amount++;
-          }
-        }
-        //tokensToBeClaimed has been initialized to a Big Number, thus we would convert amount
-        // to a big number and then set its value
-        setTokensToBeClaimed(BigNumber.from(amount));
-      }
-    } catch (err) {
-      console.error(err);
-      setTokensToBeClaimed(zero);
-    }
-  };
-
-  /**
-   * getBalanceOfCryptoDevTokens: checks the balance of Crypto Dev Tokens's held by an address
-   */
-  const getBalanceOfCryptoDevTokens = async () => {
-    try {
-      // Get the provider from web3Modal, which in our case is MetaMask
-      // No need for the Signer here, as we are only reading state from the blockchain
-      const provider = await getProviderOrSigner();
-      // Create an instace of token contract
-      const tokenContract = new Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        TOKEN_CONTRACT_ABI,
-        provider
-      );
-      // We will get the signer now to extract the address of the currently connected MetaMask account
-      const signer = await getProviderOrSigner(true);
-      // Get the address associated to the signer which is connected to  MetaMask
-      const address = await signer.getAddress();
-      // call the balanceOf from the token contract to get the number of tokens held by the user
-      const balance = await tokenContract.balanceOf(address);
-      // balance is already a big number, so we dont need to convert it before setting it
-      setBalanceOfCryptoDevTokens(balance);
-    } catch (err) {
-      console.error(err);
-      setBalanceOfCryptoDevTokens(zero);
-    }
-  };
-
-  /**
-   * mintCryptoDevToken: mints `amount` number of tokens to a given address
-   */
-  const mintCryptoDevToken = async (amount) => {
+  const presaleMint = async () => {
     try {
       // We need a Signer here since this is a 'write' transaction.
-      // Create an instance of tokenContract
       const signer = await getProviderOrSigner(true);
-      // Create an instance of tokenContract
-      const tokenContract = new Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        TOKEN_CONTRACT_ABI,
+      // Create a new instance of the Contract with a Signer, which allows
+      // update methods
+      const nftContract = new Contract(
+        NFT_CONTRACT_ADDRESS,
+        abi,
         signer
       );
-      // Each token is of `0.001 ether`. The value we need to send is `0.001 * amount`
-      const value = 0.001 * amount;
-      const tx = await tokenContract.mint(amount, {
-        // value signifies the cost of one crypto dev token which is "0.001" eth.
-        // We are parsing `0.001` string to ether using the utils library from ethers.js
-        value: utils.parseEther(value.toString()),
+      // call the presaleMint from the contract, only whitelisted addresses would be able to mint
+      const tx = await nftContract.presaleMint({
+        // value signifies the cost of one crypto dev which is "0.01" eth.
+        // We are parsing `0.01` string to ether using the utils library from ethers.js
+        value: utils.parseEther("0.01"),
       });
       setLoading(true);
       // wait for the transaction to get mined
       await tx.wait();
       setLoading(false);
-      window.alert("Sucessfully minted Crypto Dev Tokens");
-      await getBalanceOfCryptoDevTokens();
-      await getTotalTokensMinted();
-      await getTokensToBeClaimed();
+      window.alert("You successfully minted a Crypto Wild3!");
     } catch (err) {
       console.error(err);
     }
   };
 
   /**
-   * claimCryptoDevTokens: Helps the user claim Crypto Dev Tokens
+   * publicMint: Mint an NFT after the presale
    */
-  const claimCryptoDevTokens = async () => {
+  const publicMint = async () => {
     try {
       // We need a Signer here since this is a 'write' transaction.
-      // Create an instance of tokenContract
       const signer = await getProviderOrSigner(true);
-      // Create an instance of tokenContract
-      const tokenContract = new Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        TOKEN_CONTRACT_ABI,
+      // Create a new instance of the Contract with a Signer, which allows
+      // update methods
+      const nftContract = new Contract(
+        NFT_CONTRACT_ADDRESS,
+        abi,
         signer
       );
-      const tx = await tokenContract.claim();
+      // call the mint from the contract to mint the Crypto Dev
+      const tx = await nftContract.mint({
+        // value signifies the cost of one crypto dev which is "0.01" eth.
+        // We are parsing `0.01` string to ether using the utils library from ethers.js
+        value: utils.parseEther("0.01"),
+      });
       setLoading(true);
       // wait for the transaction to get mined
       await tx.wait();
       setLoading(false);
-      window.alert("Sucessfully claimed Crypto Dev Tokens");
-      await getBalanceOfCryptoDevTokens();
-      await getTotalTokensMinted();
-      await getTokensToBeClaimed();
+      window.alert("You successfully minted a Crypto Wild3!");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /*
+      connectWallet: Connects the MetaMask wallet
+    */
+  const connectWallet = async () => {
+    try {
+      // Get the provider from web3Modal, which in our case is MetaMask
+      // When used for the first time, it prompts the user to connect their wallet
+      await getProviderOrSigner();
+      setWalletConnected(true);
     } catch (err) {
       console.error(err);
     }
   };
 
   /**
-   * getTotalTokensMinted: Retrieves how many tokens have been minted till now
-   * out of the total supply
+   * startPresale: starts the presale for the NFT Collection
    */
-  const getTotalTokensMinted = async () => {
+  const startPresale = async () => {
+    try {
+      // We need a Signer here since this is a 'write' transaction.
+      const signer = await getProviderOrSigner(true);
+      // Create a new instance of the Contract with a Signer, which allows
+      // update methods
+      const nftContract = new Contract(
+        NFT_CONTRACT_ADDRESS,
+        abi,
+        signer
+      );
+      // call the startPresale from the contract
+      const tx = await nftContract.startPresale();
+      setLoading(true);
+      // wait for the transaction to get mined
+      await tx.wait();
+      setLoading(false);
+      // set the presale started to true
+      await checkIfPresaleStarted();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /**
+   * checkIfPresaleStarted: checks if the presale has started by quering the `presaleStarted`
+   * variable in the contract
+   */
+  const checkIfPresaleStarted = async () => {
     try {
       // Get the provider from web3Modal, which in our case is MetaMask
       // No need for the Signer here, as we are only reading state from the blockchain
       const provider = await getProviderOrSigner();
-      // Create an instance of token contract
-      const tokenContract = new Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        TOKEN_CONTRACT_ABI,
-        provider
-      );
-      // Get all the tokens that have been minted
-      const _tokensMinted = await tokenContract.totalSupply();
-      setTokensMinted(_tokensMinted);
+      // We connect to the Contract using a Provider, so we will only
+      // have read-only access to the Contract
+      const nftContract = new Contract(NFT_CONTRACT_ADDRESS, abi, provider);
+      // call the presaleStarted from the contract
+      const _presaleStarted = await nftContract.presaleStarted();
+      if (!_presaleStarted) {
+        await getOwner();
+      }
+      setPresaleStarted(_presaleStarted);
+      return _presaleStarted;
     } catch (err) {
       console.error(err);
+      return false;
     }
   };
 
   /**
-   * getOwner: gets the contract owner by connected address
+   * checkIfPresaleEnded: checks if the presale has ended by quering the `presaleEnded`
+   * variable in the contract
+   */
+  const checkIfPresaleEnded = async () => {
+    try {
+      // Get the provider from web3Modal, which in our case is MetaMask
+      // No need for the Signer here, as we are only reading state from the blockchain
+      const provider = await getProviderOrSigner();
+      // We connect to the Contract using a Provider, so we will only
+      // have read-only access to the Contract
+      const nftContract = new Contract(NFT_CONTRACT_ADDRESS, abi, provider);
+      // call the presaleEnded from the contract
+      const _presaleEnded = await nftContract.presaleEnded();
+      // _presaleEnded is a Big Number, so we are using the lt(less than function) instead of `<`
+      // Date.now()/1000 returns the current time in seconds
+      // We compare if the _presaleEnded timestamp is less than the current time
+      // which means presale has ended
+      const hasEnded = _presaleEnded.lt(Math.floor(Date.now() / 1000));
+      if (hasEnded) {
+        setPresaleEnded(true);
+      } else {
+        setPresaleEnded(false);
+      }
+      return hasEnded;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  /**
+   * getOwner: calls the contract to retrieve the owner
    */
   const getOwner = async () => {
     try {
+      // Get the provider from web3Modal, which in our case is MetaMask
+      // No need for the Signer here, as we are only reading state from the blockchain
       const provider = await getProviderOrSigner();
-      const nftContract = new Contract(TOKEN_CONTRACT_ADDRESS, TOKEN_CONTRACT_ABI, provider);
+      // We connect to the Contract using a Provider, so we will only
+      // have read-only access to the Contract
+      const nftContract = new Contract(NFT_CONTRACT_ADDRESS, abi, provider);
       // call the owner function from the contract
-      const _owner = await tokenContract.owner();
-      // we get signer to extract address of currently connected Metamask account
+      const _owner = await nftContract.owner();
+      // We will get the signer now to extract the address of the currently connected MetaMask account
       const signer = await getProviderOrSigner(true);
-      // Get the address associated to signer which is connected to Metamask
+      // Get the address associated to the signer which is connected to  MetaMask
       const address = await signer.getAddress();
       if (address.toLowerCase() === _owner.toLowerCase()) {
         setIsOwner(true);
@@ -220,27 +204,24 @@ export default function Home() {
   };
 
   /**
-   * withdrawCoins: withdraws ether and tokens by calling 
-   * the withdraw function in the contract
+   * getTokenIdsMinted: gets the number of tokenIds that have been minted
    */
-  const withdrawCoins = async () => {
+  const getTokenIdsMinted = async () => {
     try {
-      const signer = await getProviderOrSigner(true);
-      const tokenContract = new Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        TOKEN_CONTRACT_ABI,
-        signer
-      );
-
-      const tx = await tokenContract.withdraw();
-      setLoading(true);
-      await tx.wait();
-      setLoading(false);
-      await getOwner();
+      // Get the provider from web3Modal, which in our case is MetaMask
+      // No need for the Signer here, as we are only reading state from the blockchain
+      const provider = await getProviderOrSigner();
+      // We connect to the Contract using a Provider, so we will only
+      // have read-only access to the Contract
+      const nftContract = new Contract(NFT_CONTRACT_ADDRESS, abi, provider);
+      // call the tokenIds from the contract
+      const _tokenIds = await nftContract.tokenIds();
+      //_tokenIds is a `Big Number`. We need to convert the Big Number to a string
+      setTokenIdsMinted(_tokenIds.toString());
     } catch (err) {
       console.error(err);
     }
-  }
+  };
 
   /**
    * Returns a Provider or Signer object representing the Ethereum RPC with or without the
@@ -274,20 +255,6 @@ export default function Home() {
     return web3Provider;
   };
 
-  /*
-        connectWallet: Connects the MetaMask wallet
-      */
-  const connectWallet = async () => {
-    try {
-      // Get the provider from web3Modal, which in our case is MetaMask
-      // When used for the first time, it prompts the user to connect their wallet
-      await getProviderOrSigner();
-      setWalletConnected(true);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   // useEffects are used to react to changes in state of the website
   // The array at the end of function call represents what state changes will trigger this effect
   // In this case, whenever the value of `walletConnected` changes - this effect will be called
@@ -302,103 +269,111 @@ export default function Home() {
         disableInjectedProvider: false,
       });
       connectWallet();
-      getTotalTokensMinted();
-      getBalanceOfCryptoDevTokens();
-      getTokensToBeClaimed();
-      withdrawCoins();
+
+      // Check if presale has started and ended
+      const _presaleStarted = checkIfPresaleStarted();
+      if (_presaleStarted) {
+        checkIfPresaleEnded();
+      }
+
+      getTokenIdsMinted();
+
+      // Set an interval which gets called every 5 seconds to check presale has ended
+      const presaleEndedInterval = setInterval(async function () {
+        const _presaleStarted = await checkIfPresaleStarted();
+        if (_presaleStarted) {
+          const _presaleEnded = await checkIfPresaleEnded();
+          if (_presaleEnded) {
+            clearInterval(presaleEndedInterval);
+          }
+        }
+      }, 5 * 1000);
+
+      // set an interval to get the number of token Ids minted every 5 seconds
+      setInterval(async function () {
+        await getTokenIdsMinted();
+      }, 5 * 1000);
     }
   }, [walletConnected]);
 
   /*
-        renderButton: Returns a button based on the state of the dapp
-      */
+      renderButton: Returns a button based on the state of the dapp
+    */
   const renderButton = () => {
+    // If wallet is not connected, return a button which allows them to connect their wllet
+    if (!walletConnected) {
+      return (
+        <button onClick={connectWallet} className={styles.button}>
+          Connect your wallet
+        </button>
+      );
+    }
+
     // If we are currently waiting for something, return a loading button
     if (loading) {
+      return <button className={styles.button}>Loading...</button>;
+    }
+
+    // If connected user is the owner, and presale hasnt started yet, allow them to start the presale
+    if (isOwner && !presaleStarted) {
+      return (
+        <button className={styles.button} onClick={startPresale}>
+          Start Presale!
+        </button>
+      );
+    }
+
+    // If connected user is not the owner but presale hasn't started yet, tell them that
+    if (!presaleStarted) {
       return (
         <div>
-          <button className={styles.button}>Loading...</button>
+          <div className={styles.description}>Presale hasnt started!</div>
         </div>
       );
     }
-    // if owner is connected, withdrawCoins() is called
-    if (walletConnected && isOwner) {
-      return (
-        <div>
-          <button className={styles.button1} onClick={withdrawCoins}>
-            Withdraw Coins
-          </button>
-        </div>
-      );
-    }
-    // If tokens to be claimed are greater than 0, Return a claim button
-    if (tokensToBeClaimed > 0) {
+
+    // If presale started, but hasn't ended yet, allow for minting during the presale period
+    if (presaleStarted && !presaleEnded) {
       return (
         <div>
           <div className={styles.description}>
-            {tokensToBeClaimed * 10} Tokens can be claimed!
+            Presale has started!!! If your address is whitelisted, Mint a
+            Crypto Wild3 🥳
           </div>
-          <button className={styles.button} onClick={claimCryptoDevTokens}>
-            Claim Tokens
+          <button className={styles.button} onClick={presaleMint}>
+            Presale Mint 🚀
           </button>
         </div>
       );
     }
-    // If user doesn't have any tokens to claim, show the mint button
-    return (
-      <div style={{ display: "flex-col" }}>
-        <div>
-          <input
-            type="number"
-            placeholder="Amount of Tokens"
-            // BigNumber.from converts the `e.target.value` to a BigNumber
-            onChange={(e) => setTokenAmount(BigNumber.from(e.target.value))}
-            className={styles.input}
-          />
-        </div>
 
-        <button
-          className={styles.button}
-          disabled={!(tokenAmount > 0)}
-          onClick={() => mintCryptoDevToken(tokenAmount)}
-        >
-          Mint Tokens
+    // If presale started and has ended, its time for public minting
+    if (presaleStarted && presaleEnded) {
+      return (
+        <button className={styles.button} onClick={publicMint}>
+          Public Mint 🚀
         </button>
-      </div>
-    );
+      );
+    }
   };
 
   return (
     <div>
       <Head>
-        <title>Wild3 ICO</title>
-        <meta name="description" content="ICO-Dapp-Wild3" />
+        <title>Wild3 NFTs</title>
+        <meta name="description" content="Wild3-NFTs" />
         <link rel="icon" href="/favicon.png" />
       </Head>
       <div className={styles.main}>
         <div>
-          <h1 className={styles.title}>Welcome to Wild3 ICO!</h1>
+          <h1 className={styles.title}>Welcome to Crypto Wild3!</h1>
           <div className={styles.description}>
-            You can claim or mint Crypto Wild3 tokens here
+            Its an NFT collection for Web3.
           </div>
-          {walletConnected ? (
-            <div>
-              <div className={styles.description}>
-                {/* Format Ether helps us in converting a BigNumber to string */}
-                You have minted {utils.formatEther(balanceOfCryptoDevTokens)} Crypto
-                Wild3 Tokens
-              </div>
-              <div className={styles.description}>
-                {/* Format Ether helps us in converting a BigNumber to string */}
-                Overall {utils.formatEther(tokensMinted)}/10000 have been minted!!!
-              </div>
-              {renderButton()}
-            </div>
-          ) : (
-            <button onClick={connectWallet} className={styles.button}>
-              Connect your wallet
-            </button>
-          )}
+          <div className={styles.description}>
+            {tokenIdsMinted}/20 have been minted
+          </div>
+          {renderButton()}
         </div>
         <div>
           <img className={styles.image} src="./cr.jpg" />
