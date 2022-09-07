@@ -360,7 +360,7 @@ export default function Home() {
   return (
     <div>
       <Head>
-        <title>Wild3 NFTs</title>
+        <title>Crypto Wild3</title>
         <meta name="description" content="Wild3-NFTs" />
         <link rel="icon" href="/favicon.png" />
       </Head>
@@ -368,7 +368,7 @@ export default function Home() {
         <div>
           <h1 className={styles.title}>Welcome to Crypto Wild3!</h1>
           <div className={styles.description}>
-            Its an NFT collection for Web3.
+            Its an NFT collection for people in Web3.
           </div>
           <div className={styles.description}>
             {tokenIdsMinted}/20 have been minted
